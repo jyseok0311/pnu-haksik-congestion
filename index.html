@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNU 학식 실시간 혼잡도</title>
+    <style>
+      :root {
+        --bg: #f4f5f8;
+        --panel: #ffffff;
+        --ink: #1b1b2b;
+        --sub: #6a6a80;
+        --bd: #e2e2ec;
+        --accent: #1a5fb4;
+        --accent-ink: #fff;
+        --shadow: 0 6px 24px rgba(20, 20, 50, 0.08);
+        /* 1~5 단계 색상 (여유→혼잡) */
+        --l1: #1fa463; --l2: #7cb518; --l3: #d8901f; --l4: #e8590c; --l5: #d63a34;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14141c; --panel: #1e1e29; --ink: #ececf2; --sub: #9a9ab0;
+          --bd: #34344a; --accent: #6f9fe6; --accent-ink: #0c1220;
+          --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+          --l1: #2fbd77; --l2: #93cf3a; --l3: #e6a534; --l4: #f2732e; --l5: #e85751;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+        background: var(--bg); color: var(--ink); line-height: 1.5;
+      }
+      .wrap { max-width: 900px; margin: 0 auto; padding: 24px 18px 60px; }
+      header { display: flex; align-items: center; gap: 10px; margin: 8px 0 20px; }
+      .live { width: 9px; height: 9px; border-radius: 50%; background: var(--l5); animation: blink 1.4s infinite; }
+      @keyframes blink { 50% { opacity: 0.25; } }
+      h1 { font-size: 20px; margin: 0; font-weight: 800; letter-spacing: -0.02em; }
+      .sub { color: var(--sub); font-size: 13px; margin-top: 2px; }
+
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+      @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+      .card {
+        background: var(--panel); border: 1px solid var(--bd);
+        border-radius: 16px; padding: 18px; box-shadow: var(--shadow);
+      }
+      .card h2 { font-size: 14px; margin: 0 0 6px; font-weight: 700; }
+      .card .hint { font-size: 12px; color: var(--sub); margin: 0 0 14px; }
+
+      label { font-size: 12px; color: var(--sub); display: block; margin: 14px 0 8px; font-weight: 600; }
+
+      /* 식당 3곳 선택 */
+      .places { display: flex; flex-direction: column; gap: 8px; }
+      .place {
+        display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--bd);
+        background: var(--bg); border-radius: 10px; padding: 11px 13px; cursor: pointer;
+        font-size: 14px; font-weight: 600; transition: border-color .12s, background .12s;
+      }
+      .place:hover { border-color: var(--accent); }
+      .place.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+      .place .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bd); flex-shrink: 0; }
+      .place.sel .dot { background: var(--accent); }
+      .place small { font-weight: 500; color: var(--sub); margin-left: auto; }
+
+      /* 1~5 선택 */
+      .levels { display: flex; gap: 8px; }
+      .lv {
+        flex: 1; border: 1.5px solid var(--bd); background: var(--bg); border-radius: 10px;
+        padding: 12px 0; cursor: pointer; text-align: center; transition: transform .1s, border-color .12s;
+      }
+      .lv:hover { transform: translateY(-1px); }
+      .lv .n { font-size: 20px; font-weight: 800; line-height: 1; }
+      .lv .t { font-size: 10.5px; color: var(--sub); margin-top: 4px; }
+      .lv[data-l="1"] .n { color: var(--l1); } .lv[data-l="2"] .n { color: var(--l2); }
+      .lv[data-l="3"] .n { color: var(--l3); } .lv[data-l="4"] .n { color: var(--l4); }
+      .lv[data-l="5"] .n { color: var(--l5); }
+      .lv.sel { border-width: 2px; }
+      .lv.sel[data-l="1"] { border-color: var(--l1); background: color-mix(in srgb, var(--l1) 12%, var(--panel)); }
+      .lv.sel[data-l="2"] { border-color: var(--l2); background: color-mix(in srgb, var(--l2) 12%, var(--panel)); }
+      .lv.sel[data-l="3"] { border-color: var(--l3); background: color-mix(in srgb, var(--l3) 12%, var(--panel)); }
+      .lv.sel[data-l="4"] { border-color: var(--l4); background: color-mix(in srgb, var(--l4) 12%, var(--panel)); }
+      .lv.sel[data-l="5"] { border-color: var(--l5); background: color-mix(in srgb, var(--l5) 12%, var(--panel)); }
+      .scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--sub); margin-top: 6px; }
+
+      .btn {
+        margin-top: 20px; width: 100%; border: none; border-radius: 10px;
+        background: var(--accent); color: var(--accent-ink); font-weight: 700;
+        font-size: 15px; padding: 12px; cursor: pointer; transition: opacity .15s;
+      }
+      .btn:disabled { opacity: 0.5; cursor: default; }
+      .sheet-status { font-size: 11.5px; color: var(--sub); text-align: center; margin-top: 8px; min-height: 14px; }
+
+      /* 현황 보드 */
+      .board { display: flex; flex-direction: column; gap: 10px; }
+      .row {
+        display: flex; align-items: center; gap: 12px; border: 1px solid var(--bd);
+        border-radius: 12px; padding: 13px 14px; background: var(--bg);
+      }
+      .row .bar { width: 6px; align-self: stretch; border-radius: 4px; background: var(--bd); }
+      .row .name { font-weight: 700; font-size: 14px; }
+      .row .when { font-size: 11px; color: var(--sub); margin-top: 2px; }
+      .row .lvl { margin-left: auto; text-align: right; }
+      .row .lvl .badge {
+        font-weight: 800; font-size: 13px; padding: 4px 10px; border-radius: 20px;
+        color: #fff; display: inline-block;
+      }
+      .row .lvl .word { font-size: 11px; color: var(--sub); margin-top: 3px; }
+      .legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; font-size: 11px; color: var(--sub); }
+      .legend span { display: inline-flex; align-items: center; gap: 4px; }
+      .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+      /* 오늘의 식단 */
+      .menu-card { margin-top: 16px; }
+      .mdate { font-size: 12px; font-weight: 500; color: var(--sub); margin-left: 4px; }
+      .menu { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+      @media (max-width: 760px) { .menu { grid-template-columns: 1fr; } }
+      .mcol { border: 1px solid var(--bd); border-radius: 12px; padding: 14px; background: var(--bg); }
+      .mcol > .mh { font-weight: 800; font-size: 14px; }
+      .mcol > .mhours { font-size: 11px; color: var(--sub); margin: 2px 0 10px; }
+      .meal { margin-bottom: 12px; }
+      .meal:last-child { margin-bottom: 0; }
+      .meal .mt { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+      .opt { margin: 0 0 6px; }
+      .opt .ol { font-size: 12px; font-weight: 700; }
+      .opt .oi { font-size: 12.5px; color: var(--ink); }
+      .meal .none { font-size: 12px; color: var(--sub); }
+      .mstate { grid-column: 1 / -1; font-size: 13px; color: var(--sub); text-align: center; padding: 10px; }
+      .mstate b { color: var(--accent); }
+
+      .toast {
+        position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+        background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 10px;
+        font-size: 13px; opacity: 0; transition: all .25s; pointer-events: none;
+      }
+      .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+      footer { text-align: center; color: var(--sub); font-size: 12px; margin-top: 26px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <span class="live"></span>
+        <div>
+          <h1>PNU 학식 실시간 혼잡도</h1>
+          <div class="sub">식당을 고르고 지금 혼잡도를 1~5로 제보하세요</div>
+        </div>
+      </header>
+
+      <div class="grid">
+        <!-- 입력 -->
+        <div class="card">
+          <h2>제보하기</h2>
+          <p class="hint">지금 어디가 얼마나 붐비나요?</p>
+
+          <label>① 식당 선택</label>
+          <div class="places" id="places"></div>
+
+          <label>② 지금 혼잡도</label>
+          <div class="levels" id="levels"></div>
+          <div class="scale"><span>1 · 여유</span><span>5 · 혼잡</span></div>
+
+          <button class="btn" id="submit" disabled>제보 등록</button>
+          <div class="sheet-status" id="sheetStatus"></div>
+        </div>
+
+        <!-- 현황 보드 -->
+        <div class="card">
+          <h2>실시간 현황</h2>
+          <p class="hint">최근 제보 기준</p>
+          <div class="board" id="board"></div>
+          <div class="legend" id="legend"></div>
+        </div>
+      </div>
+
+      <!-- 오늘의 식단 -->
+      <div class="card menu-card">
+        <h2>🍚 오늘의 식단 <span class="mdate" id="menuDate"></span></h2>
+        <p class="hint">부산대 스마트캠퍼스 식단안내 연동</p>
+        <div class="menu" id="menu">
+          <div class="mstate">불러오는 중…</div>
+        </div>
+      </div>
+
+      <footer>부산대 금정회관 학식 혼잡도 프로젝트 · 식단 출처 m.pusan.ac.kr</footer>
+    </div>
+    <div class="toast" id="toast"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      const PLACES = [
+        { id: "금정회관(교직원)", note: "교직원식당", pnu: "금정회관 교직원 식당" },
+        { id: "금정회관(학생)", note: "학생식당", pnu: "금정회관" },
+        { id: "학생식당", note: "학생회관", pnu: "학생회관" },
+      ];
+      const LEVELS = [
+        { n: 1, t: "매우 여유", c: "--l1" },
+        { n: 2, t: "여유", c: "--l2" },
+        { n: 3, t: "보통", c: "--l3" },
+        { n: 4, t: "혼잡", c: "--l4" },
+        { n: 5, t: "매우 혼잡", c: "--l5" },
+      ];
+      const lvColor = (n) => `var(${LEVELS[n - 1].c})`;
+      const lvWord = (n) => LEVELS[n - 1].t;
+
+      // 상태: 각 식당의 최근 제보
+      const state = {}; // id -> { level, at, count }
+      let selPlace = null;
+      let selLevel = null;
+
+      // 식당 버튼
+      const placesEl = $("places");
+      PLACES.forEach((p) => {
+        const el = document.createElement("div");
+        el.className = "place";
+        el.innerHTML = `<span class="dot"></span><span>${p.id}</span><small>${p.note}</small>`;
+        el.onclick = () => {
+          selPlace = p.id;
+          [...placesEl.children].forEach((c) => c.classList.remove("sel"));
+          el.classList.add("sel");
+          refreshSubmit();
+        };
+        placesEl.appendChild(el);
+      });
+
+      // 혼잡도 1~5 버튼
+      const levelsEl = $("levels");
+      LEVELS.forEach((lv) => {
+        const el = document.createElement("div");
+        el.className = "lv";
+        el.dataset.l = lv.n;
+        el.innerHTML = `<div class="n">${lv.n}</div><div class="t">${lv.t}</div>`;
+        el.onclick = () => selectLevel(lv.n);
+        levelsEl.appendChild(el);
+      });
+      function selectLevel(n) {
+        selLevel = n;
+        [...levelsEl.children].forEach((c) => c.classList.toggle("sel", Number(c.dataset.l) === n));
+        refreshSubmit();
+      }
+
+      function refreshSubmit() {
+        $("submit").disabled = !(selPlace && selLevel);
+      }
+
+      // 제보 등록
+      $("submit").onclick = () => {
+        if (!selPlace || !selLevel) return;
+        const place = selPlace, level = selLevel;
+        const prev = state[place];
+        state[place] = { level, at: Date.now(), count: (prev?.count || 0) + 1 };
+        renderBoard();
+        showToast(`${place} · ${level}(${lvWord(level)}) 제보 완료`);
+        reportToSheet(place, level);
+        // 초기화(식당 선택은 유지)
+        selLevel = null;
+        [...levelsEl.children].forEach((c) => c.classList.remove("sel"));
+        refreshSubmit();
+      };
+
+      // 제보를 서버 → 구글시트로 전송
+      async function reportToSheet(place, level) {
+        const el = $("sheetStatus");
+        el.textContent = "구글시트 기록 중…";
+        try {
+          const r = await fetch("/api/report", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ place, level, levelWord: lvWord(level) }),
+          });
+          const d = await r.json();
+          if (d.skipped) el.textContent = "ℹ️ 구글시트 미연동 (로컬만 저장) — README 참고";
+          else if (d.ok) el.textContent = "✅ 구글시트에 기록됨";
+          else el.textContent = "⚠️ 시트 기록 실패";
+        } catch (e) {
+          el.textContent = "⚠️ 시트 기록 실패 (node server.js 로 실행했는지 확인)";
+        }
+      }
+
+      // 현황 보드
+      function renderBoard() {
+        const board = $("board");
+        board.innerHTML = "";
+        PLACES.forEach((p) => {
+          const s = state[p.id];
+          const row = document.createElement("div");
+          row.className = "row";
+          if (s) {
+            row.innerHTML = `
+              <div class="bar" style="background:${lvColor(s.level)}"></div>
+              <div>
+                <div class="name">${p.id}</div>
+                <div class="when">${timeAgo(s.at)} · 제보 ${s.count}건</div>
+              </div>
+              <div class="lvl">
+                <span class="badge" style="background:${lvColor(s.level)}">${s.level} / 5</span>
+                <div class="word">${lvWord(s.level)}</div>
+              </div>`;
+          } else {
+            row.innerHTML = `
+              <div class="bar"></div>
+              <div><div class="name">${p.id}</div><div class="when">아직 제보 없음</div></div>
+              <div class="lvl"><span class="badge" style="background:var(--bd);color:var(--sub)">–</span></div>`;
+          }
+          board.appendChild(row);
+        });
+      }
+
+      // 범례
+      $("legend").innerHTML = LEVELS.map(
+        (lv) => `<span><i style="background:var(${lv.c})"></i>${lv.n} ${lv.t}</span>`
+      ).join("");
+
+      function timeAgo(ts) {
+        const s = Math.floor((Date.now() - ts) / 1000);
+        if (s < 60) return "방금 전";
+        if (s < 3600) return Math.floor(s / 60) + "분 전";
+        return Math.floor(s / 3600) + "시간 전";
+      }
+      function showToast(msg) {
+        const t = $("toast");
+        t.textContent = msg; t.classList.add("show");
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(() => t.classList.remove("show"), 2200);
+      }
+      function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      renderBoard();
+      // 상대시간 갱신
+      setInterval(renderBoard, 30000);
+
+      // ── 오늘의 식단 연동 ──
+      async function loadMenu() {
+        const box = $("menu");
+        try {
+          const resp = await fetch("/api/menu");
+          if (!resp.ok) throw new Error("불러오기 실패");
+          const data = await resp.json();
+          $("menuDate").textContent = data.date || "";
+          renderMenu(data.cafeterias || {});
+        } catch (e) {
+          box.innerHTML =
+            '<div class="mstate">식단을 불러오려면 <b>node server.js</b> 로 실행한 뒤 ' +
+            '<b>http://localhost:3000</b> 에서 열어주세요.<br>(파일을 직접 열면 외부 데이터를 가져올 수 없어요)</div>';
+        }
+      }
+
+      function renderMenu(cafes) {
+        const box = $("menu");
+        box.innerHTML = "";
+        PLACES.forEach((p) => {
+          const c = cafes[p.pnu];
+          const col = document.createElement("div");
+          col.className = "mcol";
+          let html = `<div class="mh">${p.id}</div>`;
+          html += `<div class="mhours">${c && c.hours && c.hours.length ? c.hours.join(" · ") : p.pnu}</div>`;
+          const meals = (c && c.meals ? c.meals : []).filter((m) => !m.empty);
+          if (!c) {
+            html += `<div class="meal"><span class="none">식당 정보를 찾을 수 없어요.</span></div>`;
+          } else if (meals.length === 0) {
+            html += `<div class="meal"><span class="none">오늘 등록된 식단이 없습니다.</span></div>`;
+          } else {
+            meals.forEach((m) => {
+              html += `<div class="meal"><div class="mt">${escapeHtml(m.type)}</div>`;
+              m.options.forEach((o) => {
+                html += `<p class="opt"><span class="ol">${escapeHtml(o.label)}</span><br><span class="oi">${escapeHtml(o.items.join(", "))}</span></p>`;
+              });
+              html += `</div>`;
+            });
+          }
+          col.innerHTML = html;
+          box.appendChild(col);
+        });
+      }
+
+      loadMenu();
+    </script>
+  </body>
+</html>

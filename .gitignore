@@ -1,0 +1,13 @@
+# 로컬 비밀 — 구글시트 웹앱 URL (절대 커밋하지 않음)
+sheet-url.txt
+
+# 로그 / 임시 파일
+server.log
+*.log
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
