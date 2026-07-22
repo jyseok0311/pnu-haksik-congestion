@@ -109,8 +109,9 @@ async function fetchAllMenus() {
   return { date, cafeterias, source: "m.pusan.ac.kr" };
 }
 
-// 간단한 메모리 캐시 (10분)
-let cache = { ts: 0, data: null };
+// 간단한 메모리 캐시
+let cache = { ts: 0, data: null }; // 식단(10분)
+let statusCache = { ts: 0, data: null }; // 현황 집계(8초)
 async function getMenus() {
   const now = fakeNow();
   if (cache.data && now - cache.ts < 10 * 60 * 1000) return cache.data;
@@ -152,6 +153,36 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, data);
     } catch (e) {
       sendJson(res, 502, { error: "식단 데이터를 가져오지 못했습니다: " + e.message });
+    }
+    return;
+  }
+
+  // 실시간 현황 (구글시트에서 최근 제보 집계를 읽어옴)
+  if (req.method === "GET" && req.url.startsWith("/api/status")) {
+    if (!SHEET_WEBHOOK_URL) {
+      sendJson(res, 200, { ok: true, places: {}, note: "SHEET_WEBHOOK_URL 미설정" });
+      return;
+    }
+    try {
+      const now = Date.now();
+      if (statusCache.data && now - statusCache.ts < 8000) {
+        sendJson(res, 200, statusCache.data);
+        return;
+      }
+      const sep = SHEET_WEBHOOK_URL.includes("?") ? "&" : "?";
+      const r = await fetch(`${SHEET_WEBHOOK_URL}${sep}action=summary&window=60`);
+      const text = await r.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        data = { ok: false, places: {}, note: "요약 응답 파싱 실패(스크립트 재배포 필요할 수 있음)" };
+      }
+      if (!data.places) data.places = {};
+      statusCache = { ts: now, data };
+      sendJson(res, 200, data);
+    } catch (e) {
+      sendJson(res, 200, { ok: false, places: {}, error: e.message });
     }
     return;
   }

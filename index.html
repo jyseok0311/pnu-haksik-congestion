@@ -167,7 +167,7 @@
         <!-- 현황 보드 -->
         <div class="card">
           <h2>실시간 현황</h2>
-          <p class="hint">최근 제보 기준</p>
+          <p class="hint">최근 1시간 제보 종합 · 15초마다 갱신</p>
           <div class="board" id="board"></div>
           <div class="legend" id="legend"></div>
         </div>
@@ -204,10 +204,18 @@
       const lvColor = (n) => `var(${LEVELS[n - 1].c})`;
       const lvWord = (n) => LEVELS[n - 1].t;
 
-      // 상태: 각 식당의 최근 제보
-      const state = {}; // id -> { level, at, count }
+      // 상태
+      let serverState = {}; // 시트 집계: id -> { level, avg, count, at(ms) }
+      const optimistic = {}; // 방금 내가 한 제보: id -> { level, at(ms) }
       let selPlace = null;
       let selLevel = null;
+
+      // 서버 집계 + 내 제보 병합 (내 제보가 더 최신이면 우선 표시)
+      function eff(id) {
+        const s = serverState[id], o = optimistic[id];
+        if (o && (!s || o.at > s.at)) return { level: o.level, at: o.at, count: s ? s.count : 0 };
+        return s || null;
+      }
 
       // 식당 버튼
       const placesEl = $("places");
@@ -248,11 +256,13 @@
       $("submit").onclick = () => {
         if (!selPlace || !selLevel) return;
         const place = selPlace, level = selLevel;
-        const prev = state[place];
-        state[place] = { level, at: Date.now(), count: (prev?.count || 0) + 1 };
+        optimistic[place] = { level, at: Date.now() };
         renderBoard();
         showToast(`${place} · ${level}(${lvWord(level)}) 제보 완료`);
         reportToSheet(place, level);
+        // 시트 기록이 반영될 때쯤 현황 다시 읽기
+        setTimeout(loadStatus, 4000);
+        setTimeout(loadStatus, 9000);
         // 초기화(식당 선택은 유지)
         selLevel = null;
         [...levelsEl.children].forEach((c) => c.classList.remove("sel"));
@@ -283,15 +293,16 @@
         const board = $("board");
         board.innerHTML = "";
         PLACES.forEach((p) => {
-          const s = state[p.id];
+          const s = eff(p.id);
           const row = document.createElement("div");
           row.className = "row";
           if (s) {
+            const meta = s.count > 0 ? `최근 1시간 ${s.count}건` : "내 제보 반영 중…";
             row.innerHTML = `
               <div class="bar" style="background:${lvColor(s.level)}"></div>
               <div>
                 <div class="name">${p.id}</div>
-                <div class="when">${timeAgo(s.at)} · 제보 ${s.count}건</div>
+                <div class="when">${timeAgo(s.at)} · ${meta}</div>
               </div>
               <div class="lvl">
                 <span class="badge" style="background:${lvColor(s.level)}">${s.level} / 5</span>
@@ -300,11 +311,29 @@
           } else {
             row.innerHTML = `
               <div class="bar"></div>
-              <div><div class="name">${p.id}</div><div class="when">아직 제보 없음</div></div>
+              <div><div class="name">${p.id}</div><div class="when">최근 1시간 제보 없음</div></div>
               <div class="lvl"><span class="badge" style="background:var(--bd);color:var(--sub)">–</span></div>`;
           }
           board.appendChild(row);
         });
+      }
+
+      // 시트에서 최근 1시간 제보 집계를 읽어와 보드 갱신 (모든 사용자 공유)
+      async function loadStatus() {
+        try {
+          const r = await fetch("/api/status");
+          const d = await r.json();
+          serverState = {};
+          Object.entries(d.places || {}).forEach(([k, v]) => {
+            const atMs = v.at ? Date.parse(v.at) : 0;
+            serverState[k] = { level: v.level, avg: v.avg, count: v.count, at: atMs };
+            // 서버가 내 제보를 반영했으면 낙관적 표시 해제
+            if (optimistic[k] && atMs >= optimistic[k].at - 2000) delete optimistic[k];
+          });
+          renderBoard();
+        } catch (e) {
+          /* 서버 미실행 등 — 로컬 표시 유지 */
+        }
       }
 
       // 범례
@@ -330,8 +359,9 @@
       }
 
       renderBoard();
-      // 상대시간 갱신
-      setInterval(renderBoard, 30000);
+      loadStatus();
+      setInterval(loadStatus, 15000); // 15초마다 시트 집계 갱신
+      setInterval(renderBoard, 30000); // 상대시간 표시 갱신
 
       // ── 오늘의 식단 연동 ──
       async function loadMenu() {
